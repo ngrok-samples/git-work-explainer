@@ -346,25 +346,30 @@ class VijilEvaluator:
     Main class for running Vijil evaluations on the Git Work Explainer agent.
     """
     
-    def __init__(self, repo_path: str = '.', llm_provider: Optional[str] = None):
+    def __init__(self, repo_path: str = '.', llm_provider: Optional[str] = None, skip_agent_init: bool = False):
         """
         Initialize the Vijil evaluator.
         
         Args:
             repo_path: Path to the git repository to analyze
             llm_provider: Optional LLM provider preference ('openai' or 'anthropic')
+            skip_agent_init: If True, skip agent initialization (useful for report generation only)
         """
         if not VIJIL_AVAILABLE:
             raise ImportError("Vijil SDK is not installed. Please install with: pip install vijil")
         
         self.repo_path = repo_path
         self.llm_provider = llm_provider
-        self.executor = GitWorkExplainerExecutor(repo_path, llm_provider)
+        self.skip_agent_init = skip_agent_init
+        self.executor = None
         self.vijil = None
         self.local_agent = None
         
-        # Check prerequisites
-        self._check_setup()
+        # Only initialize executor if we need the agent
+        if not skip_agent_init:
+            self.executor = GitWorkExplainerExecutor(repo_path, llm_provider)
+            # Check prerequisites
+            self._check_setup()
     
     def _check_setup(self):
         """Check if all required environment variables and dependencies are set up."""
@@ -404,13 +409,15 @@ class VijilEvaluator:
             self.vijil = Vijil(api_key=os.getenv("VIJIL_API_KEY"))
             print("✅ Vijil client initialized")
             
-            # Create local agent executor
-            self.local_agent = self.vijil.local_agents.create(
-                agent_function=self.executor.agent_function,
-                input_adapter=self.executor.input_adapter,
-                output_adapter=self.executor.output_adapter,
-            )
-            print("✅ Local agent executor created")
+            # Only create local agent if we have an executor
+            if self.executor:
+                # Create local agent executor
+                self.local_agent = self.vijil.local_agents.create(
+                    agent_function=self.executor.agent_function,
+                    input_adapter=self.executor.input_adapter,
+                    output_adapter=self.executor.output_adapter,
+                )
+                print("✅ Local agent executor created")
             
         except Exception as e:
             print(f"❌ Failed to initialize Vijil: {e}")
@@ -580,6 +587,67 @@ class VijilEvaluator:
                     print("✅ Agent deregistered successfully")
                 except Exception as cleanup_error:
                     print(f"⚠️  Cleanup warning: {cleanup_error}")
+    
+    def generate_evaluation_report(
+        self,
+        evaluation_id: str,
+        report_format: str = 'html',
+        report_file: Optional[str] = None,
+        wait_till_completion: bool = True
+    ) -> str:
+        """
+        Generate and download an evaluation report.
+        
+        Args:
+            evaluation_id: The ID of the evaluation to generate a report for
+            report_format: Format of the report ('html' or 'pdf')
+            report_file: Optional filename to save the report (default: {evaluation_id}-report.{format})
+            wait_till_completion: Whether to wait for completion (default: True)
+            
+        Returns:
+            The filename of the generated report
+        """
+        if not self.vijil:
+            self._init_vijil()
+        
+        # Set default filename if not provided
+        if not report_file:
+            report_file = f"{evaluation_id}-report.{report_format}"
+        
+        print(f"\n📊 Generating evaluation report...")
+        print(f"   Evaluation ID: {evaluation_id}")
+        print(f"   Format: {report_format.upper()}")
+        print(f"   Output file: {report_file}")
+        
+        # Basic validation for evaluation ID
+        if not evaluation_id or evaluation_id.strip() == "":
+            print(f"❌ Invalid evaluation ID: '{evaluation_id}'")
+            raise ValueError("Evaluation ID cannot be empty")
+        
+        try:
+            # Get the report object
+            report = self.vijil.evaluations.report(evaluation_id)
+            
+            # Generate the report
+            report.generate(
+                save_file=report_file,
+                wait_till_completion=wait_till_completion
+            )
+            
+            print(f"✅ Report generated successfully: {report_file}")
+            return report_file
+            
+        except Exception as e:
+            error_msg = str(e)
+            if "not found" in error_msg.lower() or "invalid" in error_msg.lower():
+                print(f"❌ Evaluation not found: {evaluation_id}")
+                print("   Make sure the evaluation ID is correct and the evaluation is completed")
+            elif "unauthorized" in error_msg.lower():
+                print(f"❌ Unauthorized access to evaluation: {evaluation_id}")
+                print("   Make sure you have permission to access this evaluation")
+            else:
+                print(f"❌ Report generation failed: {e}")
+            raise
 
 
 def main():
@@ -596,6 +664,8 @@ Examples:
   %(prog)s --harnesses security_Small ethics_Small  # Run multiple evaluations
   %(prog)s --advanced                         # Run advanced evaluation with monitoring
   %(prog)s --repo-path /path/to/repo          # Evaluate specific repository
+  %(prog)s --generate-report abc123           # Generate HTML report for evaluation abc123
+  %(prog)s --generate-report abc123 --report-format pdf  # Generate PDF report
   %(prog)s --check-setup                      # Check if environment is configured
   %(prog)s --list-harnesses                   # List available harnesses
 
@@ -679,6 +749,27 @@ Available Harnesses:
         choices=['openai', 'anthropic'],
         default=None,
         help='LLM provider to use for evaluation (default: auto-detect available provider)'
+    )
+    
+    parser.add_argument(
+        '--generate-report',
+        type=str,
+        metavar='EVALUATION_ID',
+        help='Generate and download evaluation report for the given evaluation ID'
+    )
+    
+    parser.add_argument(
+        '--report-format',
+        type=str,
+        choices=['html', 'pdf'],
+        default='html',
+        help='Report format (default: html)'
+    )
+    
+    parser.add_argument(
+        '--report-file',
+        type=str,
+        help='Output filename for the report (default: {evaluation_id}-report.{format})'
     )
     
     args = parser.parse_args()
@@ -774,6 +865,30 @@ Available Harnesses:
             
             print("\n✅ All checks passed - ready for evaluation!")
             return 0
+        
+        if args.generate_report:
+            print("📊 Generating evaluation report...\n")
+            
+            # Check for Vijil API key (needed for report generation)
+            if not os.getenv("VIJIL_API_KEY"):
+                print("❌ VIJIL_API_KEY is required for report generation")
+                print("   Please set your Vijil API key in your environment variables:")
+                print("   export VIJIL_API_KEY=your_api_key_here")
+                return 1
+            
+            # Initialize evaluator for report generation (skip agent initialization)
+            try:
+                evaluator = VijilEvaluator(args.repo_path, args.llm_provider, skip_agent_init=True)
+                report_file = evaluator.generate_evaluation_report(
+                    evaluation_id=args.generate_report,
+                    report_format=args.report_format,
+                    report_file=args.report_file
+                )
+                print(f"\n📁 Report saved as: {report_file}")
+                return 0
+            except Exception as e:
+                print(f"❌ Report generation failed: {e}")
+                return 1
         
         # Initialize evaluator
         evaluator = VijilEvaluator(args.repo_path, args.llm_provider)
