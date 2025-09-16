@@ -82,24 +82,30 @@ class GitWorkExplainerExecutor:
     This class adapts the WorkExplainerAgent to work with Vijil's evaluation framework.
     """
     
-    def __init__(self, repo_path: str = '.'):
+    def __init__(self, repo_path: str = '.', llm_provider: Optional[str] = None):
         """
         Initialize the executor.
         
         Args:
             repo_path: Path to the git repository to analyze
+            llm_provider: Optional LLM provider preference ('openai' or 'anthropic')
         """
         self.repo_path = Path(repo_path).absolute()
+        self.llm_provider = llm_provider
         self.agent = None
         self._init_agent()
     
     def _init_agent(self):
         """Initialize the WorkExplainerAgent."""
         try:
-            self.agent = WorkExplainerAgent()
+            self.agent = WorkExplainerAgent(prefer_provider=self.llm_provider)
             # Test that the agent can access LLM client
             if hasattr(self.agent, 'llm_client') and self.agent.llm_client:
-                print(f"✅ Agent initialized with {self.agent.llm_client.__class__.__name__}")
+                provider_name = self.agent.llm_client.__class__.__name__
+                if self.llm_provider:
+                    print(f"✅ Agent initialized with {provider_name} (requested: {self.llm_provider})")
+                else:
+                    print(f"✅ Agent initialized with {provider_name}")
             else:
                 print(f"⚠️  Agent initialized but no LLM client detected")
         except Exception as e:
@@ -340,18 +346,20 @@ class VijilEvaluator:
     Main class for running Vijil evaluations on the Git Work Explainer agent.
     """
     
-    def __init__(self, repo_path: str = '.'):
+    def __init__(self, repo_path: str = '.', llm_provider: Optional[str] = None):
         """
         Initialize the Vijil evaluator.
         
         Args:
             repo_path: Path to the git repository to analyze
+            llm_provider: Optional LLM provider preference ('openai' or 'anthropic')
         """
         if not VIJIL_AVAILABLE:
             raise ImportError("Vijil SDK is not installed. Please install with: pip install vijil")
         
         self.repo_path = repo_path
-        self.executor = GitWorkExplainerExecutor(repo_path)
+        self.llm_provider = llm_provider
+        self.executor = GitWorkExplainerExecutor(repo_path, llm_provider)
         self.vijil = None
         self.local_agent = None
         
@@ -584,6 +592,7 @@ def main():
         epilog="""
 Examples:
   %(prog)s                                    # Run basic security evaluation
+  %(prog)s --llm-provider anthropic           # Use Anthropic Claude for evaluation
   %(prog)s --harnesses security_Small ethics_Small  # Run multiple evaluations
   %(prog)s --advanced                         # Run advanced evaluation with monitoring
   %(prog)s --repo-path /path/to/repo          # Evaluate specific repository
@@ -664,6 +673,14 @@ Available Harnesses:
         help='Test the agent function locally before running Vijil evaluation'
     )
     
+    parser.add_argument(
+        '--llm-provider',
+        type=str,
+        choices=['openai', 'anthropic'],
+        default=None,
+        help='LLM provider to use for evaluation (default: auto-detect available provider)'
+    )
+    
     args = parser.parse_args()
     
     try:
@@ -691,7 +708,7 @@ Available Harnesses:
             
             # Initialize executor but don't require Vijil API key
             import asyncio
-            executor = GitWorkExplainerExecutor(args.repo_path)
+            executor = GitWorkExplainerExecutor(args.repo_path, args.llm_provider)
             
             # Test input adapter
             print("1. Testing input adapter...")
@@ -749,7 +766,7 @@ Available Harnesses:
             
             # Check agent initialization
             try:
-                executor = GitWorkExplainerExecutor(args.repo_path)
+                executor = GitWorkExplainerExecutor(args.repo_path, args.llm_provider)
                 print("✅ Agent can be initialized successfully")
             except Exception as e:
                 print(f"❌ Agent initialization failed: {e}")
@@ -759,7 +776,7 @@ Available Harnesses:
             return 0
         
         # Initialize evaluator
-        evaluator = VijilEvaluator(args.repo_path)
+        evaluator = VijilEvaluator(args.repo_path, args.llm_provider)
         
         # Run evaluation
         if args.advanced:

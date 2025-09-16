@@ -294,7 +294,7 @@ REPOSITORY CONTEXT:
 class AnthropicClient(LLMClient):
     """Anthropic Claude client for commit analysis."""
     
-    def __init__(self, api_key: Optional[str] = None, model: str = "claude-3-sonnet-20240229"):
+    def __init__(self, api_key: Optional[str] = None, model: str = "claude-opus-4-1-20250805"):
         self.api_key = api_key or os.getenv("ANTHROPIC_API_KEY")
         self.model = model
         
