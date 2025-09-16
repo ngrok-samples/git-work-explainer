@@ -1,5 +1,6 @@
 # Python
 __pycache__/
+*/__pycache__/
 *.py[cod]
 *$py.class
 *.so
@@ -53,3 +54,4 @@ __pycache__/
 # Vijil specific
 .vijil/
 vijil_results/
+*.html
