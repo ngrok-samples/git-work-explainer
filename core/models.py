@@ -111,3 +111,6 @@ class AgentResponse:
     confidence_score: float
     processing_time: float
     tokens_used: int = 0
+
+
+

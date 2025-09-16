@@ -27,15 +27,16 @@ class WorkExplainerAgent:
     This class is designed to be easily wrappable as an MCP server tool.
     """
     
-    def __init__(self, llm_client: Optional[LLMClient] = None, prefer_provider: Optional[str] = None):
+    def __init__(self, llm_client: Optional[LLMClient] = None, prefer_provider: Optional[str] = None, model: Optional[str] = None):
         """
         Initialize the agent with an optional LLM client.
         
         Args:
             llm_client: Optional LLM client instance
             prefer_provider: Optional preference for 'openai' or 'anthropic'
+            model: Optional specific model to use
         """
-        self.llm_client = llm_client or get_available_llm_client(prefer_provider)
+        self.llm_client = llm_client or get_available_llm_client(prefer_provider, model)
         if not self.llm_client:
             raise RuntimeError("No LLM client available. Please set OPENAI_API_KEY or ANTHROPIC_API_KEY environment variable.")
         

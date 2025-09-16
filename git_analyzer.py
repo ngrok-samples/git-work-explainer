@@ -130,29 +130,24 @@ class GitAnalyzer:
         return stats
     
     def get_repository_context(self) -> RepositoryContext:
-        """Get rich repository context for LLM analysis."""
+        """Get basic repository context for LLM analysis. Let LLM handle language/framework detection."""
         try:
             name = Path(self.repo.working_dir).name
             branch = self.repo.active_branch.name
             remote_url = self._get_remote_url()
             
-            # Detect language and framework
-            language = self._detect_primary_language()
-            framework = self._detect_framework()
-            project_type = self._detect_project_type()
-            
             return RepositoryContext(
                 name=name,
                 branch=branch,
                 remote_url=remote_url,
-                language=language,
-                framework=framework,
-                project_type=project_type
+                language=None,  # Let LLM analyze file content to determine language
+                framework=None,  # Let LLM analyze file content to determine framework  
+                project_type=None  # Let LLM analyze file content to determine project type
             )
         except Exception as e:
             return RepositoryContext(
                 name='unknown',
-                branch='unknown',
+                branch='unknown', 
                 remote_url=None,
                 language=None,
                 framework=None,
@@ -209,91 +204,4 @@ class GitAnalyzer:
         except Exception:
             return "Changes detected but unable to analyze diff"
     
-    def _detect_primary_language(self) -> Optional[str]:
-        """Detect the primary programming language."""
-        try:
-            # Count file extensions in the repository
-            extensions = {}
-            for item in self.repo.tree().traverse():
-                if item.type == 'blob':
-                    path = item.path
-                    if '.' in path:
-                        ext = path.split('.')[-1].lower()
-                        extensions[ext] = extensions.get(ext, 0) + 1
-            
-            # Map extensions to languages
-            language_map = {
-                'py': 'Python',
-                'js': 'JavaScript', 
-                'ts': 'TypeScript',
-                'java': 'Java',
-                'go': 'Go',
-                'rs': 'Rust',
-                'cpp': 'C++',
-                'c': 'C',
-                'rb': 'Ruby',
-                'php': 'PHP',
-                'cs': 'C#',
-                'swift': 'Swift',
-                'kt': 'Kotlin',
-                'scala': 'Scala'
-            }
-            
-            # Find most common language extension
-            if extensions:
-                most_common_ext = max(extensions.items(), key=lambda x: x[1])[0]
-                return language_map.get(most_common_ext, most_common_ext.upper())
-                
-        except Exception:
-            pass
-        return None
-    
-    def _detect_framework(self) -> Optional[str]:
-        """Detect framework or major libraries."""
-        try:
-            # Check for common framework files
-            framework_indicators = {
-                'package.json': ['React', 'Vue', 'Angular', 'Node.js'],
-                'requirements.txt': ['Django', 'Flask', 'FastAPI'],
-                'Gemfile': ['Rails', 'Sinatra'],
-                'pom.xml': ['Spring'],
-                'build.gradle': ['Spring', 'Android'],
-                'Cargo.toml': ['Rust'],
-                'go.mod': ['Go'],
-                'composer.json': ['Laravel', 'Symfony']
-            }
-            
-            for item in self.repo.tree().traverse():
-                if item.type == 'blob':
-                    filename = Path(item.path).name
-                    if filename in framework_indicators:
-                        # Could parse the file content to determine specific framework
-                        return framework_indicators[filename][0]  # Return first option for now
-                        
-        except Exception:
-            pass
-        return None
-    
-    def _detect_project_type(self) -> Optional[str]:
-        """Detect the type of project."""
-        try:
-            # Look for indicators of project type
-            indicators = {
-                'web_app': ['src/components', 'public/index.html', 'views/', 'templates/'],
-                'api': ['api/', 'endpoints/', 'routes/', 'controllers/'],
-                'library': ['lib/', 'package.json', '__init__.py'],
-                'cli_tool': ['bin/', 'cmd/', 'cli.py', 'main.py'],
-                'mobile_app': ['ios/', 'android/', 'App.js'],
-                'data_science': ['notebooks/', 'data/', 'models/', '*.ipynb']
-            }
-            
-            repo_files = [item.path for item in self.repo.tree().traverse() if item.type == 'blob']
-            
-            for project_type, patterns in indicators.items():
-                for pattern in patterns:
-                    if any(pattern in path for path in repo_files):
-                        return project_type.replace('_', ' ').title()
-                        
-        except Exception:
-            pass
-        return None
+

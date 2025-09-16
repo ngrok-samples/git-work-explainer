@@ -5,6 +5,7 @@ LLM client interface and implementations.
 import os
 import json
 import time
+import asyncio
 from abc import ABC, abstractmethod
 from typing import Dict, Any, List, Optional
 from dataclasses import asdict
@@ -41,15 +42,19 @@ class LLMClient(ABC):
 class OpenAIClient(LLMClient):
     """OpenAI API client for commit analysis."""
     
-    def __init__(self, api_key: Optional[str] = None, model: str = "gpt-4"):
+    def __init__(self, api_key: Optional[str] = None, model: str = "gpt-4o-mini"):
         self.api_key = api_key or os.getenv("OPENAI_API_KEY")
         self.model = model
+        # Fallback models in order of preference
+        self.fallback_models = ["gpt-4o-mini", "gpt-3.5-turbo", "gpt-4o", "gpt-4"]
         
         if not OPENAI_AVAILABLE:
             raise ImportError("OpenAI package not available. Install with: pip install openai")
         
         if self.api_key:
-            openai.api_key = self.api_key
+            self.client = openai.OpenAI(api_key=self.api_key)
+        else:
+            self.client = None
     
     def is_available(self) -> bool:
         """Check if OpenAI client is properly configured."""
@@ -66,21 +71,47 @@ class OpenAIClient(LLMClient):
         user_prompt = self._build_analysis_prompt(request)
         
         try:
-            response = await openai.ChatCompletion.acreate(
-                model=self.model,
-                messages=[
-                    {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": user_prompt}
-                ],
-                temperature=0.3,
-                max_tokens=2000
-            )
+            # Try the requested model first, then fallback models
+            models_to_try = [self.model] + [m for m in self.fallback_models if m != self.model]
             
-            processing_time = time.time() - start_time
-            
-            # Parse the response
-            content = response.choices[0].message.content
-            tokens_used = response.usage.total_tokens
+            last_error = None
+            for model_name in models_to_try:
+                try:
+                    response = await asyncio.to_thread(
+                        self.client.chat.completions.create,
+                        model=model_name,
+                        messages=[
+                            {"role": "system", "content": system_prompt},
+                            {"role": "user", "content": user_prompt}
+                        ],
+                        temperature=0.3,
+                        max_tokens=2000
+                    )
+                    
+                    processing_time = time.time() - start_time
+                    
+                    # Parse the response
+                    content = response.choices[0].message.content
+                    tokens_used = response.usage.total_tokens
+                    
+                    # If we used a fallback model, update self.model for future calls
+                    if model_name != self.model:
+                        print(f"   📝 Note: Using {model_name} instead of {self.model}")
+                        self.model = model_name
+                    
+                    break  # Success! Exit the retry loop
+                    
+                except Exception as e:
+                    last_error = e
+                    if "model" in str(e).lower() and "not" in str(e).lower():
+                        # Model not available, try next one
+                        continue
+                    else:
+                        # Different error, don't retry
+                        raise e
+            else:
+                # All models failed
+                raise last_error or RuntimeError("All models failed")
             
             # Extract structured summary from the response
             summary = self._parse_llm_response(content, request.user_context.target_audience)
@@ -483,12 +514,13 @@ REPOSITORY CONTEXT:
         )
 
 
-def get_available_llm_client(prefer_provider: Optional[str] = None) -> Optional[LLMClient]:
+def get_available_llm_client(prefer_provider: Optional[str] = None, model: Optional[str] = None) -> Optional[LLMClient]:
     """
     Get the first available LLM client.
     
     Args:
         prefer_provider: Optional preference for 'openai' or 'anthropic'
+        model: Optional specific model to use
     """
     providers = []
     
@@ -503,11 +535,11 @@ def get_available_llm_client(prefer_provider: Optional[str] = None) -> Optional[
     for provider in providers:
         try:
             if provider == 'openai':
-                client = OpenAIClient()
+                client = OpenAIClient(model=model) if model else OpenAIClient()
                 if client.is_available():
                     return client
             elif provider == 'anthropic':
-                client = AnthropicClient()
+                client = AnthropicClient(model=model) if model else AnthropicClient()
                 if client.is_available():
                     return client
         except ImportError:

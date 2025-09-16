@@ -7,13 +7,14 @@ import argparse
 import asyncio
 import sys
 import json
+import os
 from pathlib import Path
 
 from core.agent import WorkExplainerAgent
 from core.models import AudienceType
 from core.llm_client import get_available_llm_client
-from core.vijil_client import VijilEvaluateClient
-from core.evaluation_harnesses import EvaluationHarness, run_quick_evaluation, run_scenario_test
+
+
 
 
 def get_audience_type(audience_str: str) -> AudienceType:
@@ -110,142 +111,16 @@ Work Categories: {', '.join(cat.value.replace('_', ' ').title() for cat in summa
 """
 
 
-async def run_full_evaluation_suite(agent: WorkExplainerAgent, args):
-    """Run the complete Vijil evaluation suite."""
-    print("🧪 Running full evaluation suite...")
-    
-    try:
-        vijil_client = VijilEvaluateClient()
-        harness = EvaluationHarness(agent, vijil_client)
-        
-        results = await harness.run_full_evaluation_suite()
-        
-        # Format and save results
-        if args.evaluation_report or args.output:
-            output_file = args.output or "evaluation_report.json"
-            output_path = Path(output_file)
-            output_path.write_text(json.dumps(results, indent=2, default=str))
-            print(f"📊 Evaluation report saved to: {output_path}")
-        
-        # Print summary
-        overall_metrics = results.get("overall_metrics", {})
-        print(f"\n🎯 EVALUATION RESULTS")
-        print(f"   Trust Score: {overall_metrics.get('average_trust_score', 0):.2f}/1.0")
-        print(f"   Consistency Score: {overall_metrics.get('average_consistency_score', 0):.2f}/1.0")
-        print(f"   Pass Rate: {overall_metrics.get('pass_rate', 0):.1%}")
-        
-        recommendations = results.get("recommendations", [])
-        if recommendations:
-            print(f"\n💡 RECOMMENDATIONS:")
-            for rec in recommendations[:3]:
-                print(f"   • {rec}")
-    
-    except Exception as e:
-        print(f"❌ Evaluation suite failed: {e}")
-        if "VIJIL_API_KEY" in str(e):
-            print("💡 Tip: Set VIJIL_API_KEY environment variable to enable Vijil integration")
 
 
-async def run_evaluation_scenario(agent: WorkExplainerAgent, scenario: str, args):
-    """Run a specific evaluation scenario."""
-    print(f"🎯 Running evaluation scenario: {scenario}")
-    
-    try:
-        result = await run_scenario_test(agent, scenario)
-        
-        print(f"\n📊 SCENARIO RESULTS: {scenario}")
-        print(f"   Trust Score: {result.trust_score:.2f}/1.0")
-        print(f"   Issues Found: {len(result.issues_found)}")
-        
-        # Show trust dimensions
-        print(f"\n🔍 TRUST DIMENSIONS:")
-        for dimension, score in result.dimensions.items():
-            status = "✅" if score >= 0.7 else "⚠️" if score >= 0.5 else "❌"
-            print(f"   {status} {dimension.replace('_', ' ').title()}: {score:.2f}")
-        
-        # Show recommendations
-        if result.recommendations:
-            print(f"\n💡 RECOMMENDATIONS:")
-            for rec in result.recommendations:
-                print(f"   • {rec}")
-        
-        # Save detailed results if requested
-        if args.evaluation_report or args.output:
-            output_file = args.output or f"evaluation_{scenario}.json"
-            output_path = Path(output_file)
-            result_dict = {
-                "evaluation_id": result.evaluation_id,
-                "scenario": result.test_scenario,
-                "trust_score": result.trust_score,
-                "dimensions": result.dimensions,
-                "issues_found": result.issues_found,
-                "recommendations": result.recommendations,
-                "timestamp": result.timestamp.isoformat()
-            }
-            output_path.write_text(json.dumps(result_dict, indent=2))
-            print(f"📊 Detailed results saved to: {output_path}")
-    
-    except Exception as e:
-        print(f"❌ Evaluation scenario failed: {e}")
 
 
-async def run_quick_evaluation_mode(agent: WorkExplainerAgent, args):
-    """Run quick evaluation mode."""
-    print("⚡ Running quick evaluation...")
-    
-    try:
-        results = await run_quick_evaluation(agent)
-        
-        # Show basic results
-        if "basic_feature" in results:
-            result = results["basic_feature"]
-            print(f"\n📊 QUICK EVALUATION RESULTS")
-            print(f"   Trust Score: {result.trust_score:.2f}/1.0")
-            print(f"   Issues Found: {len(result.issues_found)}")
-            
-            if result.trust_score >= 0.7:
-                print("   ✅ Agent performance is within acceptable range")
-            else:
-                print("   ⚠️  Agent performance may need improvement")
-        
-        if "consistency" in results:
-            consistency = results["consistency"]
-            print(f"   Consistency Score: {consistency.consistency_score:.2f}/1.0")
-    
-    except Exception as e:
-        print(f"❌ Quick evaluation failed: {e}")
 
 
-async def run_consistency_test(agent: WorkExplainerAgent, args):
-    """Run consistency testing."""
-    print(f"🔄 Testing consistency ({args.consistency_runs} runs)...")
-    
-    try:
-        vijil_client = VijilEvaluateClient()
-        harness = EvaluationHarness(agent, vijil_client)
-        
-        result = await harness.test_consistency("basic_feature_development", args.consistency_runs)
-        
-        print(f"\n🔄 CONSISTENCY TEST RESULTS")
-        print(f"   Consistency Score: {result.consistency_score:.2f}/1.0")
-        print(f"   Identical Outputs: {result.identical_outputs}/{result.runs}")
-        print(f"   Similar Outputs: {result.similar_outputs}/{result.runs}")
-        print(f"   Different Outputs: {result.different_outputs}/{result.runs}")
-        
-        # Show variance metrics
-        if result.variance_metrics:
-            print(f"\n📊 VARIANCE METRICS:")
-            for metric, value in result.variance_metrics.items():
-                if isinstance(value, (int, float)):
-                    print(f"   • {metric.replace('_', ' ').title()}: {value:.3f}")
-        
-        if result.consistency_score >= 0.8:
-            print("   ✅ Agent shows good consistency")
-        else:
-            print("   ⚠️  Agent consistency may need improvement")
-    
-    except Exception as e:
-        print(f"❌ Consistency test failed: {e}")
+
+
+
+
 
 
 async def main():
@@ -259,7 +134,7 @@ Examples:
   %(prog)s -n 5 --output report.md --no-interactive  # Save summary without prompts
   %(prog)s --audience marketing --format json # Marketing summary in JSON format
   %(prog)s --llm-provider anthropic           # Use Claude instead of GPT
-  %(prog)s --evaluate --llm-provider openai   # Test GPT with Vijil evaluation
+
 
 Audience Types:
   pm, product_manager    - Product managers (default)
@@ -272,6 +147,8 @@ Audience Types:
 LLM Providers:
   openai                 - OpenAI GPT models (default)
   anthropic             - Anthropic Claude models
+
+
         """
     )
     
@@ -321,50 +198,19 @@ LLM Providers:
         help='Check if LLM APIs are properly configured'
     )
     
-    # Vijil Evaluate integration options
-    parser.add_argument(
-        '--evaluate',
-        action='store_true',
-        help='Run Vijil trustworthiness evaluation of the agent'
-    )
-    
-    parser.add_argument(
-        '--evaluation-scenario',
-        type=str,
-        choices=['basic_feature_development', 'bug_fix_analysis', 'large_refactor', 'audience_adaptation'],
-        help='Run a specific evaluation scenario'
-    )
-    
-    parser.add_argument(
-        '--test-consistency',
-        action='store_true',
-        help='Test agent consistency across multiple runs'
-    )
-    
-    parser.add_argument(
-        '--consistency-runs',
-        type=int,
-        default=3,
-        help='Number of runs for consistency testing (default: 3)'
-    )
-    
-    parser.add_argument(
-        '--evaluation-report',
-        action='store_true',
-        help='Generate detailed evaluation report'
-    )
-    
-    parser.add_argument(
-        '--full-evaluation-suite',
-        action='store_true',
-        help='Run complete evaluation suite (all scenarios + consistency tests)'
-    )
+
     
     parser.add_argument(
         '--llm-provider',
         type=str,
         choices=['openai', 'anthropic'],
         help='Preferred LLM provider (default: try both, OpenAI first)'
+    )
+    
+    parser.add_argument(
+        '--model',
+        type=str,
+        help='Specific model to use (e.g., gpt-4o-mini, gpt-3.5-turbo, claude-3-sonnet-20240229)'
     )
     
     args = parser.parse_args()
@@ -411,15 +257,7 @@ LLM Providers:
             print("      Please set OPENAI_API_KEY or ANTHROPIC_API_KEY environment variable")
             sys.exit(1)
         
-        # Check Vijil setup
-        print(f"\n🧪 EVALUATION SYSTEM:")
-        try:
-            vijil_client = VijilEvaluateClient()
-            print(f"   ✅ Vijil Evaluate - Available")
-        except Exception as e:
-            print(f"   ⚠️  Vijil Evaluate - Not configured: {e}")
-            print("      Set VIJIL_API_KEY environment variable for evaluation features")
-            print("      (Optional - basic evaluation still works without it)")
+
         
         print("\n✅ Setup check completed!")
         return
@@ -427,31 +265,17 @@ LLM Providers:
     try:
         # Initialize agent
         print("🤖 Initializing AI Git Work Explainer...")
-        agent = WorkExplainerAgent(prefer_provider=args.llm_provider)
+        agent = WorkExplainerAgent(prefer_provider=args.llm_provider, model=args.model)
         
-        # Show which provider is being used
+        # Show which provider and model is being used
         provider_name = agent.llm_client.__class__.__name__.replace('Client', '')
-        print(f"   Using: {provider_name}")
+        model_name = getattr(agent.llm_client, 'model', 'unknown')
+        print(f"   Using: {provider_name} ({model_name})")
         
         # Convert audience string to enum
         audience = get_audience_type(args.audience)
         
-        # Handle evaluation modes
-        if args.full_evaluation_suite:
-            await run_full_evaluation_suite(agent, args)
-            return
-            
-        elif args.evaluation_scenario:
-            await run_evaluation_scenario(agent, args.evaluation_scenario, args)
-            return
-            
-        elif args.evaluate:
-            await run_quick_evaluation_mode(agent, args)
-            return
-            
-        elif args.test_consistency:
-            await run_consistency_test(agent, args)
-            return
+
         
         # Regular analysis mode
         response = await agent.explain_work(
