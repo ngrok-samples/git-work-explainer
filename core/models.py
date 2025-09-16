@@ -50,6 +50,7 @@ class CommitInfo:
     date: datetime
     changed_files: List[FileChange]
     diff_summary: str  # Brief diff summary
+    code_changes: Optional[str] = None  # Actual diff content for LLM analysis
     
     @property
     def short_message(self) -> str:

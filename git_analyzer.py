@@ -35,6 +35,9 @@ class GitAnalyzer:
                 # Generate diff summary for LLM context
                 diff_summary = self._generate_diff_summary(commit)
                 
+                # Extract actual code changes for LLM analysis
+                code_changes = self._extract_code_diffs(commit)
+                
                 commit_info = CommitInfo(
                     sha=commit.hexsha[:8],
                     full_sha=commit.hexsha,
@@ -43,7 +46,8 @@ class GitAnalyzer:
                     author_email=commit.author.email,
                     date=datetime.fromtimestamp(commit.committed_date),
                     changed_files=changed_files,
-                    diff_summary=diff_summary
+                    diff_summary=diff_summary,
+                    code_changes=code_changes
                 )
                 commits.append(commit_info)
         except Exception as e:
@@ -204,4 +208,97 @@ class GitAnalyzer:
         except Exception:
             return "Changes detected but unable to analyze diff"
     
+    def _extract_code_diffs(self, commit, max_lines_per_file: int = 50) -> str:
+        """
+        Extract actual code changes from commit diffs for LLM analysis.
+        
+        Args:
+            commit: Git commit object
+            max_lines_per_file: Maximum diff lines to extract per file
+            
+        Returns:
+            Formatted string containing the actual code changes
+        """
+        try:
+            if len(commit.parents) == 0:
+                return "Initial commit - files created but diff content not available"
+            
+            parent = commit.parents[0]
+            diffs = parent.diff(commit, create_patch=True)
+            
+            if not diffs:
+                return "No file changes detected in commit"
+            
+            file_diffs = []
+            
+            for diff in diffs:
+                file_path = diff.b_path or diff.a_path
+                if not file_path:
+                    continue
+                
+                # Skip if no actual diff content
+                if not diff.diff:
+                    continue
+                
+                try:
+                    # Decode the diff content
+                    patch_content = diff.diff.decode('utf-8', errors='ignore')
+                    
+                    # Extract meaningful diff lines
+                    meaningful_lines = self._extract_meaningful_diff_lines(patch_content, max_lines_per_file)
+                    
+                    if meaningful_lines:
+                        file_diff = f"\n=== {file_path} ===\n"
+                        file_diff += "\n".join(meaningful_lines)
+                        file_diffs.append(file_diff)
+                        
+                except Exception as e:
+                    # If we can't process this file's diff, add a summary
+                    file_diffs.append(f"\n=== {file_path} ===\nDiff processing error: {str(e)}")
+            
+            if file_diffs:
+                return "\n\n".join(file_diffs)
+            else:
+                return "Code changes detected but unable to extract diff content"
+                
+        except Exception as e:
+            return f"Error extracting code diffs: {str(e)}"
+    
+    def _extract_meaningful_diff_lines(self, patch_content: str, max_lines: int) -> List[str]:
+        """
+        Extract the most meaningful lines from a diff patch.
+        
+        Args:
+            patch_content: Raw patch content from git
+            max_lines: Maximum number of lines to extract
+            
+        Returns:
+            List of meaningful diff lines
+        """
+        lines = patch_content.split('\n')
+        meaningful_lines = []
+        
+        for line in lines:
+            # Skip git diff headers and metadata
+            if (line.startswith('diff --git') or 
+                line.startswith('index ') or 
+                line.startswith('--- a/') or 
+                line.startswith('+++ b/') or
+                line.startswith('@@') and line.endswith('@@')):
+                continue
+            
+            # Include lines that show actual changes
+            if line.startswith('+') or line.startswith('-'):
+                meaningful_lines.append(line)
+            # Include some context lines (unchanged code)
+            elif line.strip() and not line.startswith('\\'):  # Skip "\ No newline at end of file"
+                meaningful_lines.append(' ' + line)  # Prefix context lines with space
+            
+            # Stop if we've collected enough lines
+            if len(meaningful_lines) >= max_lines:
+                meaningful_lines.append("... (diff truncated)")
+                break
+        
+        return meaningful_lines
+
 
