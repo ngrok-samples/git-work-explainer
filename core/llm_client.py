@@ -238,6 +238,9 @@ REPOSITORY CONTEXT:
    Message: {commit.message}
    Changes: {files_summary}
    Diff Summary: {commit.diff_summary[:200]}...
+   
+   Code Changes:
+   {commit.code_changes[:1500] if commit.code_changes else "No code changes available"}
 """)
         
         return "\n".join(prompt_parts)
@@ -481,6 +484,9 @@ REPOSITORY CONTEXT:
    Message: {commit.message}
    Changes: {files_summary}
    Diff Summary: {commit.diff_summary[:200]}...
+   
+   Code Changes:
+   {commit.code_changes[:1500] if commit.code_changes else "No code changes available"}
 """)
         
         return "\n".join(prompt_parts)
