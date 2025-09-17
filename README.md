@@ -9,7 +9,7 @@ An AI-powered CLI tool that analyzes git commits and generates business-friendly
 - **💬 Interactive Context**: Asks smart questions to gather business context
 - **🔍 Rich Git Analysis**: Extracts commit messages, file changes, diffs, and repository context
 - **📊 Multiple Formats**: Outputs markdown, text, or JSON
-- **🔧 Vijil Integration**: Evaluates agent performance using Vijil benchmarks
+- **🧪 Vijil Integration**: Full evaluation suite with multiple LLM providers and performance benchmarking
 - **⚡ Async Architecture**: Fast, modern Python with async/await
 
 ## 🚀 Quick Start
@@ -73,6 +73,95 @@ python main.py --check-setup --llm-provider anthropic
 - `marketing` - Marketing team
 - `client`, `stakeholder` - Client stakeholders
 - `technical`, `tech` - Technical team
+
+## 🧪 Vijil Evaluation
+
+This agent integrates with [Vijil](https://vijil.ai) to evaluate and benchmark its performance on various tasks. Vijil tests the agent's ability to analyze git repositories and provide appropriate responses to different types of inputs.
+
+### Quick Start with Vijil
+
+1. **Get your Vijil API key** from the [Vijil dashboard](https://vijil.ai)
+2. **Set up environment**:
+   ```bash
+   export VIJIL_API_KEY="your-vijil-api-key-here"
+   export OPENAI_API_KEY="your-openai-key"  # or ANTHROPIC_API_KEY
+   ```
+
+3. **Test your API key**:
+   ```bash
+   python vijil_executor.py --test-api-key
+   ```
+
+4. **Run evaluation**:
+   ```bash
+   # Basic evaluation with OpenAI
+   python vijil_executor.py --simple-name --llm-provider openai
+   
+   # Evaluation with Anthropic
+   python vijil_executor.py --simple-name --llm-provider anthropic
+   
+   # Custom evaluation name
+   python vijil_executor.py --evaluation-name "my-test-v1" --simple-name
+   ```
+
+### Evaluation Options
+
+```bash
+# Choose LLM provider for evaluation
+python vijil_executor.py --llm-provider anthropic|openai
+
+# Use simple agent naming (recommended)
+python vijil_executor.py --simple-name
+
+# Specify evaluation name
+python vijil_executor.py --evaluation-name "my-evaluation"
+
+# Use pre-created API key from dashboard
+python vijil_executor.py --api-key-name "my-key-name"
+
+# Select specific test harnesses
+python vijil_executor.py --harnesses security reasoning
+
+# Generate report from existing evaluation
+python vijil_executor.py --generate-report EVALUATION_ID
+```
+
+### How Vijil Testing Works
+
+When Vijil evaluates this agent:
+
+1. **Vijil sends test prompts** (e.g., "What's the capital of France?", "Explain quantum computing")
+2. **Agent analyzes actual git commits** from this repository instead of answering the prompt directly
+3. **LLM receives both** the git analysis data AND Vijil's test prompt as "additional context"
+4. **Agent responds** with git commit analysis, potentially influenced by the test prompt context
+5. **Vijil evaluates** how well the agent handled the mixed input scenario
+
+This tests the agent's ability to stay focused on its core task (git analysis) while handling potentially irrelevant or out-of-scope user input.
+
+### Troubleshooting Vijil Integration
+
+**API Key Issues:**
+```bash
+# Test API key validity
+python vijil_executor.py --test-api-key
+
+# Use simple naming to avoid UUID validation errors
+python vijil_executor.py --simple-name
+```
+
+**LLM Provider Issues:**
+```bash
+# Verify your LLM API keys work
+python main.py --check-setup
+
+# Try different provider
+python vijil_executor.py --llm-provider anthropic  # or openai
+```
+
+**Common Errors:**
+- `'NoneType' object is not subscriptable`: Use `--simple-name` flag
+- `API token validation failed`: Check your `VIJIL_API_KEY` environment variable
+- `Empty response content`: LLM provider issue, try different provider or check API keys
 
 ## 🏗 Architecture
 
@@ -167,96 +256,11 @@ ai-agent-vigil/
 2. Update prompt templates in `core/llm_client.py`
 3. Add CLI mappings in `main.py`
 
-## 🧪 Vijil Evaluate Integration
 
-This tool integrates with **[Vijil Evaluate](https://docs.vijil.ai/)** to test the trustworthiness of your AI agent. Vijil helps you understand how reliable, consistent, and safe your AI explanations are.
-
-### Trust Evaluation Features
-
-- **🎯 Accuracy Testing** - Validates that summaries match actual git changes
-- **🔄 Consistency Testing** - Ensures similar outputs for same inputs
-- **👥 Audience Appropriateness** - Checks language fits target audience
-- **🔒 Safety Checks** - Detects potential sensitive information leaks
-- **📊 Comprehensive Metrics** - 9 dimensions of trust evaluation
-
-### Evaluation Usage
-
-```bash
-# Check if Vijil is configured
-python main.py --check-setup
-
-# Quick trustworthiness evaluation
-python main.py --evaluate
-
-# Test specific scenarios
-python main.py --evaluation-scenario basic_feature_development
-
-# Test consistency (multiple runs)
-python main.py --test-consistency --consistency-runs 5
-
-# Full evaluation suite
-python main.py --full-evaluation-suite --evaluation-report
-
-# Save evaluation results
-python main.py --evaluate --output trust_report.json
-```
-
-### Evaluation Scenarios
-
-- **Basic Feature Development** - Tests standard feature work analysis
-- **Bug Fix Analysis** - Validates bug fix explanations
-- **Large Refactor** - Tests complex refactoring summaries
-- **Audience Adaptation** - Checks different audience targeting
-
-### Trust Dimensions Measured
-
-1. **Accuracy** - Summary matches git changes
-2. **Completeness** - All important aspects covered
-3. **Appropriateness** - Language fits target audience
-4. **Consistency** - Similar inputs produce similar outputs
-5. **Safety** - No sensitive information exposed
-6. **Relevance** - Content relates to actual changes
-7. **Clarity** - Summary is clear and understandable
-8. **Factuality** - Claims are factual and verifiable
-9. **Reliability** - Agent performs predictably
 
 ## 🔑 Environment Variables
 
 - `OPENAI_API_KEY` - OpenAI API key for GPT models
 - `ANTHROPIC_API_KEY` - Anthropic API key for Claude models  
-- `VIJIL_API_KEY` - Vijil API key for trustworthiness evaluation
-
-## 🚧 Roadmap
-
-**Core Features:**
-- [ ] Support for additional LLM providers (Gemini, local models)
-- [ ] Integration with project management tools (Jira, Linear)
-- [ ] Customizable summary templates
-- [ ] Team collaboration features
-- [ ] Web interface
-- [ ] Slack/Teams bot integration
-
-**Vijil Integration:**
-- [x] Vijil Evaluate integration for trustworthiness testing
-- [ ] Vijil Dome integration for real-time guardrails
-- [ ] Custom evaluation metrics for domain-specific use cases
-- [ ] Automated evaluation in CI/CD pipelines
-- [ ] Advanced consistency testing with different LLM providers
-- [ ] Integration with Vijil's red-teaming capabilities
-
-## 🤝 Contributing
-
-This tool is architected for easy extension:
-
-- **New LLM providers**: Add clients in `core/llm_client.py`
-- **Enhanced git analysis**: Extend `git_analyzer.py`
-- **Custom output formats**: Modify formatters in `main.py`
-- **Evaluation harnesses**: Add new evaluation types in `vijil_executor.py`
-
-## 📄 License
-
-MIT License - see LICENSE file for details.
-
----
-
-*Built with ❤️ for developers who need to explain their work to humans*
+- `VIJIL_API_KEY` - Vijil API key for agent evaluation and benchmarking
+- `NGROK_AUTHTOKEN` ngrok auth token to create a tunnel to the local agent
