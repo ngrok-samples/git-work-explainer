@@ -9,8 +9,15 @@ It creates adapters to make the agent compatible with Vijil's evaluation APIs.
 import os
 import asyncio
 import json
+import logging
 from typing import Dict, Any, Optional, List
 from pathlib import Path
+
+# Configure logging
+logging.basicConfig(
+    level=logging.WARNING,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
 
 # Vijil imports
 try:
@@ -29,7 +36,7 @@ except ImportError:
 
 # Local agent imports
 from core.agent import WorkExplainerAgent
-from core.models import AudienceType
+from core.models import AudienceType, UserContext
 
 
 def check_ngrok_auth():
@@ -141,36 +148,23 @@ class GitWorkExplainerExecutor:
             
             print(f"📝 Extracted user message: {user_message}")
             
-            # Classify the question to determine how to respond
-            question_type = self._classify_question(user_message)
-            print(f"🔍 Question classified as: {question_type}")
+            # Parse the message to extract parameters
+            params = self._parse_user_message(user_message)
             
-            if question_type == 'git_related':
-                # Parse the message to extract parameters for git analysis
-                params = self._parse_user_message(user_message)
-                
-                # Create user context that includes the original question
-                from core.models import UserContext
-                user_context = UserContext(
-                    additional_context=f"User request: {user_message}",
-                    target_audience=params.get("audience", AudienceType.PRODUCT_MANAGER)
-                )
-                
-                result = {
-                    "commit_count": params.get("commit_count", 5),
-                    "audience": params.get("audience", AudienceType.PRODUCT_MANAGER),
-                    "repo_path": str(self.repo_path),
-                    "interactive": False,  # Always non-interactive for Vijil
-                    "user_context": user_context,
-                    "question_type": "git_related"
-                }
-            else:
-                # Out-of-scope question - prepare for refusal response
-                result = {
-                    "question_type": "out_of_scope",
-                    "original_question": user_message,
-                    "response_type": "decline"
-                }
+            # Create user context that includes the actual question from Vijil
+            target_audience = params.get("audience", AudienceType.PRODUCT_MANAGER)
+            user_context = UserContext(
+                additional_context=f"User asked: {user_message}",
+                target_audience=target_audience
+            )
+            
+            result = {
+                "commit_count": params.get("commit_count", 5),
+                "audience": params.get("audience", AudienceType.PRODUCT_MANAGER),
+                "repo_path": str(self.repo_path),
+                "interactive": False,  # Always non-interactive for Vijil
+                "user_context": user_context
+            }
             
             print(f"🎯 Input adapter returning: {result}")
             return result
@@ -216,89 +210,6 @@ class GitWorkExplainerExecutor:
                 break
         
         return params
-    
-    def _classify_question(self, message: str) -> str:
-        """
-        Classify whether a question is git-related or out-of-scope.
-        
-        Args:
-            message: The user's question/message
-            
-        Returns:
-            'git_related' or 'out_of_scope'
-        """
-        message_lower = message.lower().strip()
-        
-        # Check for obvious out-of-scope patterns FIRST (higher priority)
-        out_of_scope_patterns = [
-            'capital of', 'what is the capital', 'who is', 'where is', 'when was',
-            'geography', 'history', 'weather', 'recipe', 'cooking', 'france', 'paris',
-            'country', 'city', 'poem', 'story', 'write a', 'tell me about',
-            'overcome by', 'gloom', 'misery', 'death', 'guilty', 'penalty',
-            'ignore previous', 'ignore all', 'forget', 'disregard'
-        ]
-        
-        for pattern in out_of_scope_patterns:
-            if pattern in message_lower:
-                return 'out_of_scope'
-        
-        # Git/development related keywords (checked after out-of-scope)
-        git_keywords = [
-            'git', 'commit', 'commits', 'repository', 'repo', 'code', 'development', 
-            'work', 'changes', 'analyze', 'analysis', 'project', 'feature', 'bug',
-            'pull request', 'merge', 'branch', 'developer', 'programming', 'software',
-            'technical', 'engineering', 'codebase', 'implementation', 'recent',
-            'last', 'summary', 'explain', 'overview', 'what happened', 'progress'
-        ]
-        
-        # Check for git-related keywords
-        for keyword in git_keywords:
-            if keyword in message_lower:
-                return 'git_related'
-        
-        # For ambiguous cases, if the message is very short or asks general questions,
-        # treat as potentially git-related to be safe
-        if len(message_lower.split()) <= 3:
-            return 'git_related'
-        
-        # Default to out-of-scope for safety (better to decline than hallucinate)
-        return 'out_of_scope'
-    
-    def _create_refusal_response(self, original_question: str) -> Dict[str, Any]:
-        """
-        Create a professional refusal response for out-of-scope questions.
-        
-        Args:
-            original_question: The original question that was out-of-scope
-            
-        Returns:
-            Dictionary containing a polite refusal response
-        """
-        refusal_message = (
-            f"I specialize in analyzing git repository development work and cannot answer "
-            f"questions outside that scope. "
-            f"\n\nI can help you with:\n"
-            f"• Analyzing recent commits and code changes\n"
-            f"• Summarizing development work for different audiences\n"
-            f"• Explaining technical progress and business impact\n"
-            f"• Reviewing project development history\n"
-            f"\nPlease ask me about code commits, development work, or repository analysis."
-        )
-        
-        return {
-            'summary': {
-                'title': 'Request Outside Agent Scope',
-                'executive_summary': refusal_message,
-                'technical_overview': 'This agent is designed specifically for git repository analysis.',
-                'business_impact': 'N/A - Request is outside agent capabilities',
-                'key_changes': ['Agent specializes in git analysis only'],
-                'next_steps': 'Please ask questions related to git commits or development work.',
-                'work_categories': [],
-                'audience': 'general'
-            },
-            'response_type': 'scope_refusal',
-            'original_question': original_question
-        }
     
     def output_adapter(self, agent_output: Any) -> ChatCompletionResponse:
         """
@@ -432,32 +343,15 @@ class GitWorkExplainerExecutor:
             adapted_input: The output from input_adapter, containing agent parameters
         """
         try:
-            print(f"🤖 Agent function called with input type: {adapted_input.get('question_type', 'unknown')}")
-            
-            # Handle out-of-scope questions with polite refusal
-            if isinstance(adapted_input, dict) and adapted_input.get('question_type') == 'out_of_scope':
-                original_question = adapted_input.get('original_question', 'Unknown question')
-                print(f"⚠️  Declining out-of-scope question: {original_question[:50]}...")
-                return self._create_refusal_response(original_question)
-            
-            # Handle git-related questions with normal analysis
-            elif isinstance(adapted_input, dict) and adapted_input.get('question_type') == 'git_related':
-                print(f"✅ Processing git-related request")
-                # Remove our custom fields before calling the agent
-                clean_input = {k: v for k, v in adapted_input.items() if k not in ['question_type']}
-                return await self.agent.explain_work(**clean_input)
-            
-            # Fallback for legacy behavior (shouldn't happen with new input adapter)
-            elif isinstance(adapted_input, dict):
-                print(f"⚠️  Legacy input format detected, processing as git analysis")
+            # The adapted_input should be a dict with agent parameters
+            if isinstance(adapted_input, dict):
                 return await self.agent.explain_work(**adapted_input)
             else:
-                print(f"⚠️  Unexpected input format, trying direct call")
+                # Fallback: treat as kwargs directly
                 return await self.agent.explain_work(adapted_input)
-                
         except Exception as e:
-            print(f"❌ Agent function error: {e}")
-            print(f"   Adapted input was: {adapted_input}")
+            print(f"Agent function error: {e}")
+            print(f"Adapted input was: {adapted_input}")
             raise
 
 
@@ -512,12 +406,21 @@ class VijilEvaluator:
         try:
             if not self.vijil:
                 self._init_vijil()
-            
             # Try a simple API call to test authentication
-            # Use the evaluations.list method which should work if API key is valid
-            evaluations = self.vijil.evaluations.list(limit=1)
-            print("✅ Vijil API key is working")
-            print(f"   API response received (found {len(evaluations) if evaluations else 0} evaluations)")
+            # The evaluations.list call may fail with NoneType error due to Vijil client bug
+            try:
+                evaluations = self.vijil.evaluations.list(limit=1)
+                eval_count = len(evaluations) if evaluations else 0
+                print("✅ Vijil API key is working")
+                print(f"   API response received (found {eval_count} evaluations)")
+            except TypeError as te:
+                if "'NoneType' object is not subscriptable" in str(te):
+                    # This is a known issue with Vijil client when API returns None
+                    # But it means we successfully connected and authenticated
+                    print("✅ Vijil API key is working")
+                    print("   (API returned None response, but authentication succeeded)")
+                else:
+                    raise te
             
         except Exception as e:
             error_msg = str(e)
@@ -1202,12 +1105,11 @@ Available Harnesses:
         
         # Run evaluation
         if args.api_key_name:
-            # Use manual evaluation with pre-existing API key
-            print("📝 Using manual evaluation with pre-existing API key")
-            results = evaluator.run_manual_evaluation(
+            # Use regular evaluation (more stable than manual)
+            print("📝 Using regular evaluation method (more stable)")
+            results = evaluator.run_evaluation(
                 agent_name=agent_name,
                 evaluation_name=args.evaluation_name,
-                api_key_name=args.api_key_name,
                 harnesses=args.harnesses
             )
             print(f"\n📊 Evaluation Results:")

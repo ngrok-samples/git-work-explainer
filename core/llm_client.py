@@ -6,9 +6,12 @@ import os
 import json
 import time
 import asyncio
+import logging
 from abc import ABC, abstractmethod
 from typing import Dict, Any, List, Optional
 from dataclasses import asdict
+
+logger = logging.getLogger(__name__)
 
 try:
     import openai
@@ -294,7 +297,7 @@ REPOSITORY CONTEXT:
 class AnthropicClient(LLMClient):
     """Anthropic Claude client for commit analysis."""
     
-    def __init__(self, api_key: Optional[str] = None, model: str = "claude-opus-4-1-20250805"):
+    def __init__(self, api_key: Optional[str] = None, model: str = "claude-3-5-sonnet-20241022"):
         self.api_key = api_key or os.getenv("ANTHROPIC_API_KEY")
         self.model = model
         
@@ -318,6 +321,8 @@ class AnthropicClient(LLMClient):
         # Build the user prompt with commit data
         user_prompt = self._build_analysis_prompt(request)
         
+
+        
         try:
             response = await asyncio.to_thread(
                 self.client.messages.create,
@@ -333,6 +338,24 @@ class AnthropicClient(LLMClient):
             processing_time = time.time() - start_time
             
             # Parse the response
+
+            
+            # Handle refusal responses
+            if response.stop_reason == 'refusal' or not response.content:
+                if response.stop_reason == 'refusal':
+                    # Claude refused to respond - likely due to content policy
+                    refusal_message = "I cannot analyze this request as it appears to contain content that violates Anthropic's usage policies. Please provide a different request focused on git repository analysis."
+                else:
+                    refusal_message = "The AI model returned an empty response. Please try again."
+                
+                return AgentResponse(
+                    summary=refusal_message,
+                    raw_analysis=refusal_message,
+                    confidence_score=0.0,
+                    processing_time=time.time() - start_time,
+                    tokens_used=response.usage.input_tokens + response.usage.output_tokens if response.usage else 0
+                )
+            
             content = response.content[0].text
             tokens_used = response.usage.input_tokens + response.usage.output_tokens
             
