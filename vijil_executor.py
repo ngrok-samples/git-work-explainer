@@ -382,6 +382,36 @@ class VijilEvaluator:
             raise ValueError("NGROK_AUTHTOKEN is required for local agent evaluation")
         
         print("✅ Environment variables configured")
+        
+        # Test the API key by trying a simple API call
+        print("🔍 Testing Vijil API key authentication...")
+        self._test_vijil_api_key()
+    
+    def _test_vijil_api_key(self):
+        """Test if the Vijil API key is working."""
+        try:
+            if not self.vijil:
+                self._init_vijil()
+            
+            # Try a simple API call to test authentication
+            # Use the evaluations.list method which should work if API key is valid
+            evaluations = self.vijil.evaluations.list(limit=1)
+            print("✅ Vijil API key is working")
+            print(f"   API response received (found {len(evaluations) if evaluations else 0} evaluations)")
+            
+        except Exception as e:
+            error_msg = str(e)
+            if "token validation failed" in error_msg.lower() or "unauthorized" in error_msg.lower():
+                print("❌ VIJIL_API_KEY authentication failed")
+                print("   Your API key might be:")
+                print("   - Invalid or expired")
+                print("   - Missing required permissions")
+                print("   - Incorrectly formatted")
+                print(f"   Current key starts with: {os.getenv('VIJIL_API_KEY', 'NOT_SET')[:8]}...")
+                print("\n   💡 Please check your API key in the Vijil dashboard")
+            else:
+                print(f"❌ API connection test failed: {e}")
+            raise
     
     async def test_agent_function(self):
         """Test the agent function with sample input."""
@@ -478,6 +508,17 @@ class VijilEvaluator:
                 print("   - privacy (privacy evaluation)")  
                 print("\n   💡 Use --list-harnesses to see all available options")
                 print(f"\n   Original error: {e}")
+            elif "unauthorized" in error_msg.lower() or "token validation failed" in error_msg.lower():
+                print(f"❌ Authentication failed: {e}")
+                print("   This might be due to:")
+                print("   - Invalid VIJIL_API_KEY")
+                print("   - API key doesn't have necessary permissions")
+                print("   - Temporary API issue")
+                print("\n   💡 Try checking your API key or using --advanced for more detailed error handling")
+            elif "api-key" in error_msg.lower() or "does not exist" in error_msg.lower():
+                print(f"❌ API key management error: {e}")
+                print("   The system is trying to use an auto-generated API key that doesn't exist.")
+                print("   💡 Try using --advanced for manual key management or contact support")
             else:
                 print(f"❌ Evaluation failed: {e}")
             raise
@@ -522,13 +563,17 @@ class VijilEvaluator:
         try:
             # Step 1: Register the agent
             print("📝 Registering agent...")
+            clean_agent_name = agent_name.lower().replace(" ", "-")
+            print(f"   Using agent name: {clean_agent_name}")
+            
             server, api_key_name = self.vijil.local_agents.register(
-                agent_name=agent_name.lower().replace(" ", "-"),
+                agent_name=clean_agent_name,
                 evaluator=self.local_agent,
                 rate_limit=rate_limit,
                 rate_limit_interval=rate_limit_interval,
             )
             print(f"✅ Agent registered at: {server.url}")
+            print(f"   Generated API key name: {api_key_name}")
             
             # Step 2: Create and trigger evaluation
             print("🔄 Creating evaluation...")
@@ -587,6 +632,79 @@ class VijilEvaluator:
                     print("✅ Agent deregistered successfully")
                 except Exception as cleanup_error:
                     print(f"⚠️  Cleanup warning: {cleanup_error}")
+    
+    def run_manual_evaluation(
+        self,
+        agent_name: str,
+        evaluation_name: str,
+        api_key_name: str,
+        harnesses: List[str] = None,
+        model_url: str = None
+    ) -> Dict[str, Any]:
+        """
+        Run evaluation using a pre-existing API key (manual approach).
+        
+        This method assumes you've already created an API key in the Vijil dashboard
+        and want to use it directly without auto-registration.
+        
+        Args:
+            agent_name: Name for the agent in evaluation
+            evaluation_name: Name for the evaluation run
+            api_key_name: Name of pre-existing API key in Vijil
+            harnesses: List of harnesses to run
+            model_url: Custom model URL (if using custom endpoint)
+            
+        Returns:
+            Dictionary with evaluation results
+        """
+        if not self.vijil:
+            self._init_vijil()
+        
+        if harnesses is None:
+            harnesses = ["security"]  # Default harness
+        
+        print(f"\n🚀 Starting manual Vijil evaluation...")
+        print(f"   Agent: {agent_name}")
+        print(f"   Evaluation: {evaluation_name}")
+        print(f"   API Key: {api_key_name}")
+        print(f"   Harnesses: {', '.join(harnesses)}")
+        
+        try:
+            # Create evaluation directly using existing API key
+            print("🔄 Creating evaluation with existing API key...")
+            evaluation = self.vijil.evaluations.create(
+                model_hub="custom",
+                model_name=agent_name,
+                name=evaluation_name,
+                api_key_name=api_key_name,
+                model_url=model_url or "http://localhost:8000/v1",  # Default local URL
+                harnesses=harnesses,
+            )
+            
+            evaluation_id = evaluation.get("id")
+            print(f"✅ Evaluation {evaluation_id} created successfully")
+            print("📝 Note: This creates the evaluation but doesn't run a local server.")
+            print("   You'll need to run your agent server separately if using a local model.")
+            
+            return {
+                "evaluation_id": evaluation_id,
+                "status": "created",
+                "api_key_name": api_key_name,
+                "results": evaluation
+            }
+            
+        except Exception as e:
+            error_msg = str(e)
+            if "api_key_name" in error_msg.lower() or "not found" in error_msg.lower():
+                print(f"❌ API key not found: {api_key_name}")
+                print("   Please create this API key in the Vijil dashboard first:")
+                print("   1. Go to Vijil dashboard")
+                print("   2. Navigate to API Keys section")
+                print(f"   3. Create a new API key named: {api_key_name}")
+                print("   4. Make sure it has evaluation permissions")
+            else:
+                print(f"❌ Manual evaluation failed: {e}")
+            raise
     
     def generate_evaluation_report(
         self,
@@ -666,6 +784,9 @@ Examples:
   %(prog)s --repo-path /path/to/repo          # Evaluate specific repository
   %(prog)s --generate-report abc123           # Generate HTML report for evaluation abc123
   %(prog)s --generate-report abc123 --report-format pdf  # Generate PDF report
+  %(prog)s --simple-name                      # Use simple agent name (helps avoid API key issues)
+  %(prog)s --api-key-name my-simple-key       # Use pre-existing API key from dashboard
+  %(prog)s --test-api-key                     # Test if your VIJIL_API_KEY is working
   %(prog)s --check-setup                      # Check if environment is configured
   %(prog)s --list-harnesses                   # List available harnesses
 
@@ -772,6 +893,24 @@ Available Harnesses:
         help='Output filename for the report (default: {evaluation_id}-report.{format})'
     )
     
+    parser.add_argument(
+        '--simple-name',
+        action='store_true',
+        help='Use a simple, predictable name for the agent (helpful for debugging API key issues)'
+    )
+    
+    parser.add_argument(
+        '--api-key-name',
+        type=str,
+        help='Use a specific API key name (must be pre-created in Vijil dashboard)'
+    )
+    
+    parser.add_argument(
+        '--test-api-key',
+        action='store_true',
+        help='Test if VIJIL_API_KEY is valid and working'
+    )
+    
     args = parser.parse_args()
     
     try:
@@ -866,6 +1005,48 @@ Available Harnesses:
             print("\n✅ All checks passed - ready for evaluation!")
             return 0
         
+        if args.test_api_key:
+            print("🧪 Testing VIJIL_API_KEY...")
+            
+            # Check if API key is set
+            api_key = os.getenv("VIJIL_API_KEY")
+            if not api_key:
+                print("❌ VIJIL_API_KEY is not set")
+                print("   Please set your Vijil API key:")
+                print("   export VIJIL_API_KEY=your_api_key_here")
+                return 1
+            
+            print(f"✅ VIJIL_API_KEY is set (starts with: {api_key[:8]}...)")
+            
+            # Try to initialize Vijil client
+            try:
+                from vijil import Vijil
+                vijil_client = Vijil(api_key=api_key)
+                print("✅ Vijil client created successfully")
+                
+                # Try a simple API call - let's try getting evaluations
+                print("🔍 Testing API authentication...")
+                
+                # This is a basic call that should work if authentication is good
+                evaluations = vijil_client.evaluations.list(limit=1)  
+                print("✅ API authentication successful!")
+                print(f"   API response received (found {len(evaluations) if evaluations else 0} evaluations)")
+                
+                return 0
+                
+            except Exception as e:
+                error_msg = str(e)
+                if "unauthorized" in error_msg.lower() or "token validation" in error_msg.lower():
+                    print("❌ API Key authentication failed")
+                    print("   Your VIJIL_API_KEY appears to be invalid or expired")
+                    print("   Please check your API key in the Vijil dashboard")
+                elif "forbidden" in error_msg.lower():
+                    print("❌ API Key permissions insufficient") 
+                    print("   Your API key may not have the required permissions")
+                else:
+                    print(f"❌ API test failed: {e}")
+                return 1
+        
         if args.generate_report:
             print("📊 Generating evaluation report...\n")
             
@@ -893,10 +1074,27 @@ Available Harnesses:
         # Initialize evaluator
         evaluator = VijilEvaluator(args.repo_path, args.llm_provider)
         
+        # Use simple name if requested
+        agent_name = args.agent_name
+        if args.simple_name:
+            agent_name = "git-work-explainer"  # Simple, predictable name
+            print(f"📝 Using simple agent name: {agent_name}")
+        
         # Run evaluation
-        if args.advanced:
+        if args.api_key_name:
+            # Use manual evaluation with pre-existing API key
+            print("📝 Using manual evaluation with pre-existing API key")
+            results = evaluator.run_manual_evaluation(
+                agent_name=agent_name,
+                evaluation_name=args.evaluation_name,
+                api_key_name=args.api_key_name,
+                harnesses=args.harnesses
+            )
+            print(f"\n📊 Evaluation Results:")
+            print(json.dumps(results, indent=2))
+        elif args.advanced:
             results = evaluator.run_advanced_evaluation(
-                agent_name=args.agent_name,
+                agent_name=agent_name,
                 evaluation_name=args.evaluation_name,
                 harnesses=args.harnesses,
                 rate_limit=args.rate_limit,
@@ -905,8 +1103,10 @@ Available Harnesses:
             print(f"\n📊 Evaluation Results:")
             print(json.dumps(results, indent=2))
         else:
+            # Use simple evaluation method (more reliable)
+            print("📝 Using simple evaluation method (use --advanced for detailed monitoring)")
             evaluator.run_evaluation(
-                agent_name=args.agent_name,
+                agent_name=agent_name,
                 evaluation_name=args.evaluation_name,
                 harnesses=args.harnesses,
                 rate_limit=args.rate_limit,
