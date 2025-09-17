@@ -9,7 +9,7 @@ An AI-powered CLI tool that analyzes git commits and generates business-friendly
 - **💬 Interactive Context**: Asks smart questions to gather business context
 - **🔍 Rich Git Analysis**: Extracts commit messages, file changes, diffs, and repository context
 - **📊 Multiple Formats**: Outputs markdown, text, or JSON
-- **🔌 MCP Server Ready**: Easily integrates with AI systems as an MCP tool
+- **🔧 Vijil Integration**: Evaluates agent performance using Vijil benchmarks
 - **⚡ Async Architecture**: Fast, modern Python with async/await
 
 ## 🚀 Quick Start
@@ -91,31 +91,7 @@ Git Repository → Git Analyzer → AI Agent → LLM API → Formatted Summary
 - **`core/models.py`** - Data models and types
 - **`git_analyzer.py`** - Rich git repository analysis
 - **`interactive_prompter.py`** - Smart context gathering
-- **`mcp_server.py`** - MCP server integration
-
-## 🔌 MCP Server Integration
-
-The tool can be used as an **MCP server** for integration with AI systems like Claude Desktop:
-
-```python
-from mcp_server import process_mcp_request
-
-# Analyze commits for executives
-result = process_mcp_request("explain_git_work", {
-    "repo_path": "/path/to/repo",
-    "audience": "executive",
-    "commit_count": 5,
-    "context": {
-        "project_goal": "Implement user authentication",
-        "business_impact": "Increase user security and trust"
-    }
-})
-```
-
-### Available MCP Tools
-
-1. **`explain_git_work`** - Full commit analysis and summary generation
-2. **`get_repository_info`** - Basic repository information
+- **`vijil_executor.py`** - Vijil integration for agent evaluation
 
 ## 📊 Example Output
 
@@ -175,7 +151,7 @@ ai-agent-vigil/
 ├── git_analyzer.py        # Git repository analysis
 ├── interactive_prompter.py # User interaction
 ├── main.py               # CLI interface
-├── mcp_server.py         # MCP server wrapper
+├── vijil_executor.py     # Vijil evaluation integration
 └── requirements.txt      # Dependencies
 ```
 
@@ -275,7 +251,7 @@ This tool is architected for easy extension:
 - **New LLM providers**: Add clients in `core/llm_client.py`
 - **Enhanced git analysis**: Extend `git_analyzer.py`
 - **Custom output formats**: Modify formatters in `main.py`
-- **MCP tools**: Add new tools in `mcp_server.py`
+- **Evaluation harnesses**: Add new evaluation types in `vijil_executor.py`
 
 ## 📄 License
 

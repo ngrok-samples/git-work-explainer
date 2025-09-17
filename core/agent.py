@@ -24,7 +24,7 @@ class WorkExplainerAgent:
     """
     Main AI agent that orchestrates between git data and LLM APIs.
     
-    This class is designed to be easily wrappable as an MCP server tool.
+    This class provides a clean interface for analyzing git repositories.
     """
     
     def __init__(self, llm_client: Optional[LLMClient] = None, prefer_provider: Optional[str] = None, model: Optional[str] = None):
@@ -106,11 +106,11 @@ class WorkExplainerAgent:
         """Synchronous wrapper for explain_work."""
         return asyncio.run(self.explain_work(**kwargs))
     
-    # MCP Server Interface Methods
-    # These methods provide a clean interface that can be easily wrapped as MCP tools
+    # Utility Interface Methods  
+    # These methods provide a clean interface for repository analysis
     
     def get_repository_summary(self, repo_path: str = '.') -> Dict[str, Any]:
-        """Get basic repository information - suitable for MCP tool."""
+        """Get basic repository information."""
         try:
             self.set_repository(repo_path)
             context = self.git_analyzer.get_repository_context()
@@ -143,7 +143,7 @@ class WorkExplainerAgent:
         repo_path: str = '.',
         context: Optional[Dict[str, Any]] = None
     ) -> Dict[str, Any]:
-        """Analyze commits for a specific audience - suitable for MCP tool."""
+        """Analyze commits for a specific audience."""
         try:
             # Convert string audience to enum
             audience_map = {
@@ -200,7 +200,7 @@ class WorkExplainerAgent:
             return {"error": str(e)}
     
     def generate_quick_summary(self, repo_path: str = '.', commit_count: int = 3) -> Dict[str, Any]:
-        """Generate a quick summary - suitable for MCP tool."""
+        """Generate a quick summary."""
         try:
             return self.analyze_commits_for_audience(
                 audience_type='product_manager',
@@ -212,7 +212,7 @@ class WorkExplainerAgent:
             return {"error": str(e)}
 
 
-# Standalone functions for MCP server integration
+# Standalone utility functions
 def create_agent() -> WorkExplainerAgent:
     """Factory function to create a work explainer agent."""
     return WorkExplainerAgent()
@@ -225,7 +225,7 @@ def explain_git_work(
     context: Optional[Dict[str, Any]] = None
 ) -> Dict[str, Any]:
     """
-    Standalone function to explain git work - perfect for MCP server wrapping.
+    Standalone function to explain git work.
     
     Args:
         repo_path: Path to git repository
@@ -249,7 +249,7 @@ def explain_git_work(
 
 
 def get_repo_info(repo_path: str = '.') -> Dict[str, Any]:
-    """Get repository information - perfect for MCP server wrapping."""
+    """Get repository information."""
     try:
         agent = create_agent()
         return agent.get_repository_summary(repo_path)
