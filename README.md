@@ -1,18 +1,18 @@
-# AI Git Work Explainer 🤖
+# AI Git Work Explainer
 
 An AI-powered CLI tool that analyzes git commits and generates business-friendly summaries for non-technical stakeholders. Uses LLM APIs (OpenAI/Anthropic) to understand your development work and explain it in terms that matter to different audiences.
 
-## ✨ Features
+## Features
 
-- **🧠 AI-Powered Analysis**: Uses GPT-4 or Claude to understand commit context and generate intelligent summaries
-- **🎯 Audience-Aware**: Tailors explanations for product managers, executives, marketing, clients, etc.
-- **💬 Interactive Context**: Asks smart questions to gather business context
-- **🔍 Rich Git Analysis**: Extracts commit messages, file changes, diffs, and repository context
-- **📊 Multiple Formats**: Outputs markdown, text, or JSON
-- **🧪 Vijil Integration**: Full evaluation suite with multiple LLM providers and performance benchmarking
-- **⚡ Async Architecture**: Fast, modern Python with async/await
+- **AI-Powered Analysis**: Uses GPT-4 or Claude to understand commit context and generate intelligent summaries
+- **Audience-Aware**: Tailors explanations for product managers, executives, marketing, clients, etc.
+- **Interactive Context**: Asks smart questions to gather business context
+- **Rich Git Analysis**: Extracts commit messages, file changes, diffs, and repository context
+- **Multiple Formats**: Outputs markdown, text, or JSON
+- **Vijil Integration**: Full evaluation suite with multiple LLM providers and performance benchmarking
+- **Async Architecture**: Fast, modern Python with async/await
 
-## 🚀 Quick Start
+## Quick Start
 
 1. **Install dependencies**:
    ```bash
@@ -31,7 +31,7 @@ An AI-powered CLI tool that analyzes git commits and generates business-friendly
    python main.py
    ```
 
-## 📖 Usage
+## Usage
 
 ### Basic Usage
 
@@ -74,7 +74,7 @@ python main.py --check-setup --llm-provider anthropic
 - `client`, `stakeholder` - Client stakeholders
 - `technical`, `tech` - Technical team
 
-## 🧪 Vijil Evaluation
+## Vijil Evaluation
 
 This agent integrates with [Vijil](https://vijil.ai) to evaluate and benchmark its performance on various tasks. Vijil tests the agent's ability to analyze git repositories and provide appropriate responses to different types of inputs.
 
@@ -163,7 +163,7 @@ python vijil_executor.py --llm-provider anthropic  # or openai
 - `API token validation failed`: Check your `VIJIL_API_KEY` environment variable
 - `Empty response content`: LLM provider issue, try different provider or check API keys
 
-## 🏗 Architecture
+## Architecture
 
 This tool is designed as an **AI agent** that orchestrates between different data sources and AI APIs:
 
@@ -182,7 +182,7 @@ Git Repository → Git Analyzer → AI Agent → LLM API → Formatted Summary
 - **`interactive_prompter.py`** - Smart context gathering
 - **`vijil_executor.py`** - Vijil integration for agent evaluation
 
-## 📊 Example Output
+## Example Output
 
 ```markdown
 # User Authentication System Implementation
@@ -227,7 +227,7 @@ create accounts and access personalized experiences.
 *Work Categories: Feature, Security*
 ```
 
-## 🛠 Development
+## Development
 
 ### Project Structure
 
@@ -258,7 +258,7 @@ ai-agent-vigil/
 
 
 
-## 🔑 Environment Variables
+## Environment Variables
 
 - `OPENAI_API_KEY` - OpenAI API key for GPT models
 - `ANTHROPIC_API_KEY` - Anthropic API key for Claude models  
